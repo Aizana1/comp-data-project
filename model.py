@@ -26,5 +26,35 @@ class BibliographicEntity(IdentifiableEntity):
 
     def getVenue(self) -> str:
         return self.venue
+    
+class Citation(IdentifiableEntity):
+    def __init__(self, id: list, creation: str, timespan: str,
+                 citing_entity: BibliographicEntity,
+                 cited_entity: BibliographicEntity):
+        super().__init__(id)
+        self.creation      = creation
+        self.timespan      = timespan
+        self.citing_entity = citing_entity
+        self.cited_entity  = cited_entity
+
+    def getCreation(self) -> str:
+        return self.creation
+
+    def getTimespan(self) -> str:
+        return self.timespan
+
+    def getCitingEntity(self) -> BibliographicEntity:
+        return self.citing_entity
+
+    def getCitedEntity(self) -> BibliographicEntity:
+        return self.cited_entity
+
+
+class AuthorSelfCitation(Citation):
+    pass
+
+
+class JournalSelfCitation(Citation):
+    pass
 
 
