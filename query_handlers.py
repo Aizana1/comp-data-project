@@ -2,7 +2,7 @@
 import subprocess
 import sys
 
-for _pkg in ["pandas"]:
+for _pkg in ["pandas", "sparql-dataframe"]:
     try:
         __import__(_pkg.replace("-", "_"))
     except ImportError:
@@ -10,6 +10,7 @@ for _pkg in ["pandas"]:
 
 from sqlite3 import connect
 from pandas import DataFrame, read_sql
+from sparql_dataframe import get as sparql_get
 
 from handler import QueryHandler
 
@@ -51,3 +52,72 @@ class BibliographicEntityQueryHandler(QueryHandler):
         return self._q(
             "SELECT * FROM BibliographicEntity WHERE LOWER(venue) LIKE LOWER(?)",
             (f"%{venue}%",))
+    
+class CitationQueryHandler(QueryHandler):
+
+    _PFX = f"""
+        PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        PREFIX base: <{BASE_URL}>
+    """
+
+    _BODY = """
+        ?cit rdf:type base:Citation ;
+             base:oci ?oci .
+        OPTIONAL {{ ?cit base:creation              ?creation   }}
+        OPTIONAL {{ ?cit base:timespan              ?timespan   }}
+        OPTIONAL {{ ?cit base:isJournalSelfCitation ?journal_sc }}
+        OPTIONAL {{ ?cit base:isAuthorSelfCitation  ?author_sc  }}
+        OPTIONAL {{ ?cit base:hasCitingEntity ?cn . ?cn base:hasId ?citing }}
+        OPTIONAL {{ ?cit base:hasCitedEntity  ?cd . ?cd base:hasId ?cited  }}
+    """
+
+    _SELECT = "SELECT ?oci ?creation ?timespan ?citing ?cited ?journal_sc ?author_sc"
+
+    def _get(self, query: str) -> DataFrame:
+        try:
+            return sparql_get(self.dbPathOrUrl, self._PFX + query, True)
+        except Exception as e:
+            print(f"[CitationQueryHandler] SPARQL error: {e}")
+            return DataFrame()
+
+    def getById(self, id: str) -> DataFrame:
+        return self._get(f"""
+            {self._SELECT} WHERE {{
+                {self._BODY}
+                FILTER(?oci = "{id}")
+            }}""")
+
+    def getAllCitations(self) -> DataFrame:
+        return self._get(f"{self._SELECT} WHERE {{ {self._BODY} }}")
+
+    def getAllAuthorSelfCitations(self) -> DataFrame:
+        return self._get(f"""
+            {self._SELECT} WHERE {{
+                {self._BODY}
+                ?cit rdf:type base:AuthorSelfCitation .
+            }}""")
+
+    def getAllJournalSelfCitations(self) -> DataFrame:
+        return self._get(f"""
+            {self._SELECT} WHERE {{
+                {self._BODY}
+                ?cit rdf:type base:JournalSelfCitation .
+            }}""")
+
+    def getCitationsWithinTimespan(
+            self, min_timespan: str, max_timespan: str) -> DataFrame:
+        return self._get(f"""
+            {self._SELECT} WHERE {{
+                {self._BODY}
+                ?cit base:timespan ?timespan .
+                FILTER(?timespan >= "{min_timespan}" && ?timespan <= "{max_timespan}")
+            }}""")
+
+    def getCitationsWithinDate(
+            self, start_date: str, end_date: str) -> DataFrame:
+        return self._get(f"""
+            {self._SELECT} WHERE {{
+                {self._BODY}
+                ?cit base:creation ?creation .
+                FILTER(?creation >= "{start_date}" && ?creation <= "{end_date}")
+            }}""")
