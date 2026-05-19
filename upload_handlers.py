@@ -14,6 +14,9 @@ from sqlite3 import connect
 
 from handler import UploadHandler
 
+from rdflib import Graph, URIRef, Literal, RDF, Namespace
+from rdflib.plugins.stores.sparqlstore import SPARQLUpdateStore
+
 BASE_URL = "https://github.com/comp-data/2025-2026/res/"
 
 
@@ -60,4 +63,79 @@ class BibliographicEntityUploadHandler(UploadHandler):
             print(f"[BibliographicEntityUploadHandler] Error: {e}")
             return False
 
+class CitationUploadHandler(UploadHandler):
 
+    _C_CITATION   = URIRef(BASE_URL + "Citation")
+    _C_JOURNAL_SC = URIRef(BASE_URL + "JournalSelfCitation")
+    _C_AUTHOR_SC  = URIRef(BASE_URL + "AuthorSelfCitation")
+
+    _P_OCI        = URIRef(BASE_URL + "oci")
+    _P_CREATION   = URIRef(BASE_URL + "creation")
+    _P_TIMESPAN   = URIRef(BASE_URL + "timespan")
+    _P_CITING     = URIRef(BASE_URL + "hasCitingEntity")
+    _P_CITED      = URIRef(BASE_URL + "hasCitedEntity")
+    _P_JOURNAL_SC = URIRef(BASE_URL + "isJournalSelfCitation")
+    _P_AUTHOR_SC  = URIRef(BASE_URL + "isAuthorSelfCitation")
+    _P_HAS_ID     = URIRef(BASE_URL + "hasId")
+
+    _CIT_NS = Namespace(BASE_URL + "citation/")
+    _ENT_NS = Namespace(BASE_URL + "entity/")
+
+    def pushDataToDb(self, path: str) -> bool:
+        try:
+            df = pd.read_csv(path, keep_default_na=False, dtype=str)
+            g  = Graph()
+
+            for _, row in df.iterrows():
+                oci      = row["oci"].strip()
+                is_jsc   = row.get("journal_sc", "").strip().lower() == "yes"
+                is_asc   = row.get("author_sc",  "").strip().lower() == "yes"
+                creation = row.get("creation",   "").strip()
+                timespan = row.get("timespan",   "").strip()
+                citing_r = row.get("citing",     "").strip()
+                cited_r  = row.get("cited",      "").strip()
+
+                subj = self._CIT_NS[_safe_uri(oci)]
+
+                g.add((subj, RDF.type, self._C_CITATION))
+                if is_jsc:
+                    g.add((subj, RDF.type, self._C_JOURNAL_SC))
+                if is_asc:
+                    g.add((subj, RDF.type, self._C_AUTHOR_SC))
+
+                g.add((subj, self._P_OCI,        Literal(oci)))
+                g.add((subj, self._P_JOURNAL_SC, Literal("yes" if is_jsc else "no")))
+                g.add((subj, self._P_AUTHOR_SC,  Literal("yes" if is_asc else "no")))
+
+                if creation:
+                    g.add((subj, self._P_CREATION, Literal(creation)))
+                if timespan:
+                    g.add((subj, self._P_TIMESPAN, Literal(timespan)))
+
+                if citing_r:
+                    cn = self._ENT_NS[_safe_uri(citing_r)]
+                    g.add((subj, self._P_CITING, cn))
+                    g.add((cn,   self._P_HAS_ID, Literal(citing_r)))
+
+                if cited_r:
+                    cd = self._ENT_NS[_safe_uri(cited_r)]
+                    g.add((subj, self._P_CITED, cd))
+                    g.add((cd,   self._P_HAS_ID, Literal(cited_r)))
+
+            # Serialize the whole graph and upload in one HTTP request
+            import urllib.request
+            turtle_data = g.serialize(format="turtle").encode("utf-8")
+            endpoint = self.dbPathOrUrl.replace("/sparql", "")
+            req = urllib.request.Request(
+                endpoint + "?context-uri=urn:x-arq:DefaultGraph",
+                data=turtle_data,
+                headers={"Content-Type": "text/turtle;charset=utf-8"},
+                method="POST",
+            )
+            urllib.request.urlopen(req)
+
+            return True
+
+        except Exception as e:
+            print(f"[CitationUploadHandler] Error: {e}")
+            return False
