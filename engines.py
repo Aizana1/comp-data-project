@@ -180,4 +180,24 @@ class FullQueryEngine(BasicQueryEngine):
 
     def getJournalSelfCitationsByName(self, journal_name: str) -> list:
         nl = journal_name.lower()
-        return [c for c in self.getAllJournalSelfCitations()
+        return [c for c in self.getAllJournalSelfCitations()]
+    
+    def getCitationsOfBibEntityByTitleWithinDate(
+            self, bib_entity_title: str, min_date: str, max_date: str) -> list:
+        ids: set = set()
+        for ent in self.getBibliographicEntitiesWithTitle(bib_entity_title):
+            ids.update(ent.getIds())
+        if not ids:
+            return []
+        return [c for c in self.getCitationsWithinDate(min_date, max_date)
+                if set(c.getCitedEntity().getIds()) & ids]
+
+    def getReferencesOfBibEntityByTitleWithinTimespan(
+            self, bib_entity_title: str, min_timespan: str, max_timespan: str) -> list:
+        ids: set = set()
+        for ent in self.getBibliographicEntitiesWithTitle(bib_entity_title):
+            ids.update(ent.getIds())
+        if not ids:
+            return []
+        return [c for c in self.getCitationsWithinTimespan(min_timespan, max_timespan)
+                if set(c.getCitingEntity().getIds()) & ids]    
