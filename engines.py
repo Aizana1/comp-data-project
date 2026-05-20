@@ -16,6 +16,44 @@ from model import (
 )
 from query_handlers import BibliographicEntityQueryHandler, CitationQueryHandler
 
+BASE_URL = "https://github.com/comp-data/2025-2026/res/"
+
+def _row_to_bib_entity(row) -> BibliographicEntity:
+    authors = [a.strip() for a in str(row.get("author", "")).split(";") if a.strip()]
+    return BibliographicEntity(
+        id               = [row.get("internalId", "unknown")],
+        title            = str(row.get("title", "")),
+        author           = authors,
+        publication_date = str(row.get("pub_date", "")),
+        venue            = str(row.get("venue", "")),
+    )
+
+
+def _choose_cls(row) -> type:
+    is_asc = str(row.get("author_sc",  "")).strip().lower() == "yes"
+    is_jsc = str(row.get("journal_sc", "")).strip().lower() == "yes"
+    if is_asc:
+        return AuthorSelfCitation
+    if is_jsc:
+        return JournalSelfCitation
+    return Citation
+
+
+def _row_to_citation(row, entity_map: dict, forced_cls=None) -> Citation:
+    cls       = forced_cls if forced_cls is not None else _choose_cls(row)
+    oci       = str(row.get("oci", "unknown"))
+    citing_id = str(row.get("citing", ""))
+    cited_id  = str(row.get("cited",  ""))
+    return cls(
+        id            = [oci],
+        creation      = str(row.get("creation", "")),
+        timespan      = str(row.get("timespan", "")),
+        citing_entity = entity_map.get(citing_id,
+                            BibliographicEntity(id=[citing_id or "unknown"])),
+        cited_entity  = entity_map.get(cited_id,
+                            BibliographicEntity(id=[cited_id  or "unknown"])),
+    )
+
 class BasicQueryEngine:
     def __init__(self):
         self.citationQuery:            list = []
@@ -132,3 +170,14 @@ class BasicQueryEngine:
         return self._to_bib_entities(
             self._merge_bib([h.getBibliographicEntitiesWithVenue(venue)
                              for h in self.bibliographicEntityQuery]))
+
+class FullQueryEngine(BasicQueryEngine):
+
+    def getAuthorSelfCitationsByName(self, author_name: str) -> list:
+        nl = author_name.lower()
+        return [c for c in self.getAllAuthorSelfCitations()
+                if any(nl in a.lower() for a in c.getCitingEntity().getAuthors())]
+
+    def getJournalSelfCitationsByName(self, journal_name: str) -> list:
+        nl = journal_name.lower()
+        return [c for c in self.getAllJournalSelfCitations()
