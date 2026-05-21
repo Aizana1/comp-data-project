@@ -122,7 +122,6 @@ class CitationUploadHandler(UploadHandler):
                     g.add((subj, self._P_CITED, cd))
                     g.add((cd,   self._P_HAS_ID, Literal(cited_r)))
 
-            # Serialize the whole graph and upload in one HTTP request
             import urllib.request
             turtle_data = g.serialize(format="turtle").encode("utf-8")
             endpoint = self.dbPathOrUrl.replace("/sparql", "")

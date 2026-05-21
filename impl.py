@@ -24,4 +24,5 @@ from query_handlers import (
 
 from engines import (
     BasicQueryEngine,
+    FullQueryEngine
 )
