@@ -11,12 +11,10 @@ from sqlite3 import connect
 from pandas import DataFrame, read_sql, concat
 
 from model import (
-    BibliographicEntity, Citation,
+    IdentifiableEntity, BibliographicEntity, Citation,
     AuthorSelfCitation, JournalSelfCitation,
 )
 from query_handlers import BibliographicEntityQueryHandler, CitationQueryHandler
-
-BASE_URL = "https://github.com/comp-data/2025-2026/res/"
 
 def _row_to_bib_entity(row) -> BibliographicEntity:
     authors = [a.strip() for a in str(row.get("author", "")).split(";") if a.strip()]
@@ -110,7 +108,7 @@ class BasicQueryEngine:
     def _to_bib_entities(self, df: DataFrame) -> list:
         return [_row_to_bib_entity(row) for _, row in df.iterrows()]
 
-    def getEntityById(self, id: str):
+    def getEntityById(self, id: str) -> IdentifiableEntity:
         for h in self.bibliographicEntityQuery:
             df = h.getById(id)
             if not df.empty:
@@ -135,12 +133,12 @@ class BasicQueryEngine:
             self._merge_cit([h.getAllJournalSelfCitations() for h in self.citationQuery]),
             forced_cls=JournalSelfCitation)
 
-    def getCitationsWithinTimespan(self, min_ts: str, max_ts: str) -> list:
+    def getCitationsWithinTimespan(self, min_ts: str = None, max_ts: str = None) -> list:
         return self._to_citations(
             self._merge_cit([h.getCitationsWithinTimespan(min_ts, max_ts)
                              for h in self.citationQuery]))
 
-    def getCitationsWithinDate(self, start: str, end: str) -> list:
+    def getCitationsWithinDate(self, start: str = None, end: str = None) -> list:
         return self._to_citations(
             self._merge_cit([h.getCitationsWithinDate(start, end)
                              for h in self.citationQuery]))
@@ -160,11 +158,15 @@ class BasicQueryEngine:
             self._merge_bib([h.getBibliographicEntitiesWithAuthor(author)
                              for h in self.bibliographicEntityQuery]))
 
-    def getBibliographicEntitiesWithinPublicationDate(
-            self, start: str, end: str) -> list:
+    def getBibliographicEntitiesWithinDate(
+            self, start: str = None, end: str = None) -> list:
         return self._to_bib_entities(
             self._merge_bib([h.getBibliographicEntitiesWithinPublicationDate(start, end)
                              for h in self.bibliographicEntityQuery]))
+
+    def getBibliographicEntitiesWithinPublicationDate(
+            self, start: str = None, end: str = None) -> list:
+        return self.getBibliographicEntitiesWithinDate(start, end)
 
     def getBibliographicEntitiesWithVenue(self, venue: str) -> list:
         return self._to_bib_entities(
@@ -172,15 +174,17 @@ class BasicQueryEngine:
                              for h in self.bibliographicEntityQuery]))
 
 class FullQueryEngine(BasicQueryEngine):
-
     def getAuthorSelfCitationsByName(self, author_name: str) -> list:
         nl = author_name.lower()
         return [c for c in self.getAllAuthorSelfCitations()
-                if any(nl in a.lower() for a in c.getCitingEntity().getAuthors())]
+                if any(nl in a.lower() for a in c.getCitingEntity().getAuthors())
+                and any(nl in a.lower() for a in c.getCitedEntity().getAuthors())]
 
     def getJournalSelfCitationsByName(self, journal_name: str) -> list:
         nl = journal_name.lower()
-        return [c for c in self.getAllJournalSelfCitations()]
+        return [c for c in self.getAllJournalSelfCitations()
+                if nl in c.getCitingEntity().getVenue().lower()
+                and nl in c.getCitedEntity().getVenue().lower()]
     
     def getCitationsOfBibEntityByTitleWithinDate(
             self, bib_entity_title: str, min_date: str, max_date: str) -> list:

@@ -124,9 +124,8 @@ class CitationUploadHandler(UploadHandler):
 
             import urllib.request
             turtle_data = g.serialize(format="turtle").encode("utf-8")
-            endpoint = self.dbPathOrUrl.replace("/sparql", "")
             req = urllib.request.Request(
-                endpoint + "?context-uri=urn:x-arq:DefaultGraph",
+                self.dbPathOrUrl,
                 data=turtle_data,
                 headers={"Content-Type": "text/turtle;charset=utf-8"},
                 method="POST",

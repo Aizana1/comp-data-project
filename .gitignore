@@ -1,0 +1,11 @@
+# Blazegraph
+blazegraph.jar
+blazegraph.jnl
+rules.log
+
+# Generated databases
+relational.db
+
+# Python
+__pycache__/
+*.pyc

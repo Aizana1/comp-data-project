@@ -17,7 +17,6 @@ from handler import QueryHandler
 BASE_URL = "https://github.com/comp-data/2025-2026/res/"
 
 class BibliographicEntityQueryHandler(QueryHandler):
-
     def _q(self, sql: str, params: tuple = ()) -> DataFrame:
         with connect(self.dbPathOrUrl) as con:
             return read_sql(sql, con, params=params)
@@ -43,10 +42,16 @@ class BibliographicEntityQueryHandler(QueryHandler):
             (f"%{author}%",))
 
     def getBibliographicEntitiesWithinPublicationDate(
-            self, start_date: str, end_date: str) -> DataFrame:
-        return self._q(
-            "SELECT * FROM BibliographicEntity WHERE pub_date >= ? AND pub_date <= ?",
-            (start_date, end_date))
+            self, start_date: str = None, end_date: str = None) -> DataFrame:
+        conditions, params = [], []
+        if start_date:
+            conditions.append("pub_date >= ?")
+            params.append(start_date)
+        if end_date:
+            conditions.append("pub_date <= ?")
+            params.append(end_date)
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        return self._q(f"SELECT * FROM BibliographicEntity {where}", tuple(params))
 
     def getBibliographicEntitiesWithVenue(self, venue: str) -> DataFrame:
         return self._q(
@@ -54,7 +59,6 @@ class BibliographicEntityQueryHandler(QueryHandler):
             (f"%{venue}%",))
     
 class CitationQueryHandler(QueryHandler):
-
     _PFX = f"""
         PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
         PREFIX base: <{BASE_URL}>
@@ -105,19 +109,29 @@ class CitationQueryHandler(QueryHandler):
             }}""")
 
     def getCitationsWithinTimespan(
-            self, min_timespan: str, max_timespan: str) -> DataFrame:
+            self, min_timespan: str = None, max_timespan: str = None) -> DataFrame:
+        parts = []
+        if min_timespan:
+            parts.append(f'?timespan >= "{min_timespan}"')
+        if max_timespan:
+            parts.append(f'?timespan <= "{max_timespan}"')
+        filter_clause = f"FILTER({' && '.join(parts)})" if parts else ""
         return self._get(f"""
             {self._SELECT} WHERE {{
                 {self._BODY}
-                ?cit base:timespan ?timespan .
-                FILTER(?timespan >= "{min_timespan}" && ?timespan <= "{max_timespan}")
+                {filter_clause}
             }}""")
 
     def getCitationsWithinDate(
-            self, start_date: str, end_date: str) -> DataFrame:
+            self, start_date: str = None, end_date: str = None) -> DataFrame:
+        parts = []
+        if start_date:
+            parts.append(f'?creation >= "{start_date}"')
+        if end_date:
+            parts.append(f'?creation <= "{end_date}"')
+        filter_clause = f"FILTER({' && '.join(parts)})" if parts else ""
         return self._get(f"""
             {self._SELECT} WHERE {{
                 {self._BODY}
-                ?cit base:creation ?creation .
-                FILTER(?creation >= "{start_date}" && ?creation <= "{end_date}")
+                {filter_clause}
             }}""")
