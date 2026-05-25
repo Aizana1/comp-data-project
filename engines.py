@@ -1,12 +1,3 @@
-import subprocess
-import sys
-
-for _pkg in ["pandas"]:
-    try:
-        __import__(_pkg)
-    except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", _pkg, "-q"])
-
 from sqlite3 import connect
 from pandas import DataFrame, read_sql, concat
 
@@ -89,9 +80,10 @@ class BasicQueryEngine:
         return em
 
     def _merge_bib(self, dfs: list) -> DataFrame:
-        if not dfs:
+        non_empty = [d for d in dfs if not d.empty]
+        if not non_empty:
             return DataFrame()
-        return concat(dfs, ignore_index=True).drop_duplicates(subset=["internalId"])
+        return concat(non_empty, ignore_index=True).drop_duplicates(subset=["internalId"])
 
     def _merge_cit(self, dfs: list) -> DataFrame:
         non_empty = [d for d in dfs if not d.empty]
